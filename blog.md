@@ -1,13 +1,13 @@
 # How to implement generic matrix multiplication (GEMM) with generic element types on GPU?
 
-After reading this blog, you will learn:
+This blog is a technical note for the [Open Source Promotion Plan 2023](https://summer-ospp.ac.cn/) project ["TropicalGEMM on GPU"](https://summer-ospp.ac.cn/org/prodetail/23fec0105?lang=en&list=pro) released by JuliaCN, where I developed a [Julia](https://julialang.org/) package [CuTropicalGemm.jl](github.com/TensorBFS/CuTropicalGEMM.jl) calculate Generic Matrix Multiplication (GEMM) of Tropical Numbers on Nvidia GPUs.
+
+This blog covers the following contents:
 
 1. What is Tropical algebra? Why we need that?
 2. What is `Julia` programing language and why it is useful?
 3. Why GPU is fast and how to implement a fast generic matrix multiplication on Nvidia GPU?
 4. How to join the [Open Source Promotion Plan](https://summer-ospp.ac.cn/)?
-
-This blog is a technical note for the [Open Source Promotion Plan 2023](https://summer-ospp.ac.cn/) project ["TropicalGEMM on GPU"](https://summer-ospp.ac.cn/org/prodetail/23fec0105?lang=en&list=pro) relesed by JuliaCN, where I developed a [Julia](https://julialang.org/) package [CuTropicalGemm.jl](github.com/TensorBFS/CuTropicalGEMM.jl) calculate Generic Matrix Multiplication (GEMM) of Tropical Numbers on Nvidia GPUs.
 
 ## What is Tropical Algebra and why we need it?
 
@@ -35,7 +35,8 @@ For example, it was shown that solving the groud state energy of spin glass prob
 * [arxiv: Tropical Tensor Network for Ground States of Spin Glasses](https://arxiv.org/abs/2008.06888)
 * [Lei Wang: "Tropical Tensor Networks"](https://www.youtube.com/watch?v=l_7xZ4trcnE)
 
-Although such reformulation did not actucally reduce the complexity of the problem, but in this way we can fully use the power of parallel computing technology developed in recent years and greatly speed up the computation.
+However, these works are built on top of a poorly implemented tropical matrix multiplication routine that can only use less than $10$ percent of the theoreical computational power of a GPU device (check the benchmark below). 
+With a proper implement the tropical GEMM on CUDA, these algorithms could be speed up for more than one orders.
 
 Recently, it has also been considered to use the Tropical algebra in machine learning area, as shown in 
 
@@ -57,11 +58,11 @@ Including how to use them and how we developed them.
 
 As we mentioned above, we choose to use the `Julia` programing language, which is becoming more and more popular in the past few years.
 Why we choose `Julia`?
-Let's just copy something from the blog [*Why We Create Julia?*](https://julialang.org/blog/2012/02/why-we-created-julia/):
+Let's just copy an introduction from [Effective Extensible Programming: Unleashing Julia on GPUs](https://arxiv.org/pdf/1712.03112.pdf):
 
->We are greedy: we want more.
+>Julia is a high-level, high-performance dynamic program- ming language for technical computing. It features a type system with parametric polymorphism, multiple dispatch, metaprogramming capabilities, and other high- level features. The most remarkable aspect of the language and its main implementation is speed: carefully written Julia code performs exceptionally well on traditional microprocessors, approaching the speed of code written in statically-compiled languages like C or FORTRAN.
 >
->We want a language that's open source, with a liberal license. We want the speed of C with the dynamism of Ruby. We want a language that's homoiconic, with true macros like Lisp, but with obvious, familiar mathematical notation like Matlab. We want something as usable for general programming as Python, as easy for statistics as R, as natural for string processing as Perl, as powerful for linear algebra as Matlab, as good at gluing programs together as the shell. Something that is dirt simple to learn, yet keeps the most serious hackers happy. We want it interactive and we want it compiled.
+>Julia’s competitive performance originates from clever language design that avoids the typical compilation and exe- cution uncertainties associated with dynamic languages. For example, Julia features a systemic vocabulary of types, with primitive types (integers, floats) mapping onto machine- native representations. The compiler uses type inference to propagate type information throughout the program, tagging locations (variables, temporaries) with the type known at compile time. If a location is fully typed and the layout of that type is known, the compiler can often use stack memory to store its value. In contrast, uncertainty with respect to the type of a location obligates variably-sized run-time heap allocations, with type tags next to values and dynamic checks on those tags as is common in many high-level languages.
 
 Briefly, `Julia` is fast, and easy to use.
 
@@ -72,28 +73,9 @@ Briefly, `Julia` is fast, and easy to use.
 For convenience, we want to use tropical number just like normal numbers willout lose of performance, so that we make use of the type system in `Julia`.
 
 Type system of `Julia` allows us to create our own types, and `Julia` support multiple dispatch based on that.
-For example, we can do the following things in `Julia`
-```julia
-julia> struct bird end
+In Julia, the operators $+$ and $*$ could overloaded elegantly with [multiple dispatch](https://en.wikipedia.org/wiki/Multiple_dispatch), which is a feature not available in object oriented languages such as `Python` and `C++`.
 
-julia> struct dog end
-
-julia> function fly(a::bird) return true end
-fly (generic function with 1 method)
-
-julia> function fly(a::dog) return false end
-fly (generic function with 2 methods)
-
-julia> bird_1 = bird(); dog_1 = dog();
-
-julia> fly(bird_1)
-true
-
-julia> fly(dog_1)
-false
-```
-
-Then we can simply define the Tropical number as a new number type, and overload the correspond operations.
+Base on that, we simply define the Tropical number as a new number type, and overload the correspond operations.
 That is what we do in package [TropicalNumbers.jl](github.com/TensorBFS/TropicalNumbers.jl).
 ```julia
 abstract type AbstractSemiring <: Number end
@@ -342,5 +324,3 @@ If interested, just go and join OSPP $2024$!
 I am very grateful for the guidance and assistance provided by Prof. [Jinguo Liu](https://github.com/GiggleLiu) during the project implementation process.
 I would like to thank [Tim Besard](https://github.com/maleadt) for his invaluable guidance and support during the development of the package, his expertise in GPU utilization have been immensely helpful. 
 I also want to thank [Tyler Thomas](https://github.com/tylerjthomas9) for his assistance in understanding the usage of BinaryBuilder.jl.
-
-This program is support by [Open Source Promotion Plan 2023](https://summer-ospp.ac.cn/), JuliaCN.

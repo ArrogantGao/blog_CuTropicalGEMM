@@ -264,6 +264,7 @@ Here we will briefly introduce these techinques, and for more detailed introduct
 
 As we all know, Nvidia GPU is fast because it have a large amount of cuda cores.
 For example, the Nvidia A800 GPU have $6912$ cuda cores, which is much more larger than the number of CPU cores, which is normally less than $100$.
+The peak flops of A800 is about~$19.5$T, which is also much higher than that of CPU, for example $0.5$T for an Intel i7-10700K.
 ![CPU vs GPU](https://www.intel.com/content/dam/developer/articles/technical/comparing-cpus-gpus-and-fpgas-for-oneapi/CvGvF_CPU_GPU.jpg)
 However, each cuda core is much weaker than that of CPU, so that the developer will have to properly allocate the tasks to these cores so that can fully use them.
 In a CUDA kernel, each cuda core is used by a *thread* and these *threads* are grouped as *blocks*.

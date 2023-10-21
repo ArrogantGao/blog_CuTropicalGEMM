@@ -1,38 +1,100 @@
-# CuTropicalGEMM.jl: A fast package for Matrix Multiplication of Tropical Numbers on GPU
+# How to implement generic matrix multiplication (GEMM) with generic element types on GPU?
 
-In this blog, I would like to share some experience of developing a julia package called [CuTropicalGemm.jl](github.com/TensorBFS/CuTropicalGEMM.jl), which is used to calculate Generic Matrix Multiplication (GEMM) of Tropical Numbers on Nvidia GPUs.
-In the following sections, I will introduce the background of this package, the technique we used and show some examples.
+After reading this blog, you will learn:
 
-## What are tropical numbers and why we need them?
+1. What is Tropical algebra? Why we need that?
+2. What is `Julia` programing language and why it is useful?
+3. Why GPU is fast and how to implement a fast generic matrix multiplication on Nvidia GPU?
+4. How to join the [Open Source Promotion Plan](https://summer-ospp.ac.cn/)?
 
-Tropical numbers, also known as the tropical semiring, is defined on $\mathbb{R} \cup \{\infty\}$ with addition and multiplication defined as $x \oplus y = \max\{(x,~y)\},~x \otimes y = x + y$, this algebra is also called the TropicalMaxPlus.
-The following properties holds the tropical numbers
+This blog is a technical note for the [Open Source Promotion Plan 2023](https://summer-ospp.ac.cn/) project ["TropicalGEMM on GPU"](https://summer-ospp.ac.cn/org/prodetail/23fec0105?lang=en&list=pro) relesed by JuliaCN, where I developed a [Julia](https://julialang.org/) package [CuTropicalGemm.jl](github.com/TensorBFS/CuTropicalGEMM.jl) calculate Generic Matrix Multiplication (GEMM) of Tropical Numbers on Nvidia GPUs.
 
-1. Addition $\oplus$ is commutative monoid and $0$ is its neutral element of addition.
-2. Multiplication $\otimes$ is monoid and $0$ is its neutral element of multiplication.
-3. Multiplication left and right distributes over addition.
+## What is Tropical Algebra and why we need it?
+
+[Tropical algebra](https://en.wikipedia.org/wiki/Tropical_geometry) is a set of [semiring algebra](https://en.wikipedia.org/wiki/Semiring), which is a generalization of a ring, dropping the requirement that each element must have an additive inverse.
+Generally, they can be defined as a set $R$ equipped with two binary operations $\oplus$ and $\otimes$, called addition and multiplication, such that:
+
+* $(R, \oplus)$ is a monoid with identity element called $\mathbb{0}$;
+* $(R, \otimes)$ is a monoid with identity element called $\mathbb{1}$;
+* Addition is commutative;
+* Multiplication by the additive identity $\mathbb{0}$ annihilates ;
+* Multiplication left- and right-distributes over addition;
+* Explicitly stated, $(R, \oplus)$ is a commutative monoid.
+
+
+A Topical algebra can be described as a tuple $(R, \oplus, \otimes, \mathbb{0}, \mathbb{1})$, where $R$ is the set, $\oplus$ and $\otimes$ are the opeartions and $\mathbb{0}$, $\mathbb{1}$ are their identity element, respectively. 
+Here some commonly used algebras are listed below:
+* `TropicalAndOr`: $([T, F], \lor, \land, F, T)$;
+* `TropicalMaxPlus` (also simply called `Tropical`): $(\mathbb{R}, \max, +, -\infty, 0)$;
+* `TropicalMinPlus`: $(\mathbb{R}, \min, +, \infty, 0)$;
+* `TropicalMaxMul`: $(\mathbb{R}^+, \max, \times, 0, 1)$.
 
 In recent years, the tropical numbers have been widely used in various areas, including optimization, physics, and computer science, due to its computational simplicity.
 
-For example, it was shown that solving the groud state energy of spin glass problem can be mapped as contraction of a tropical tensor network, which is actually calculating tons of matrix multiplication.
+For example, it was shown that solving the groud state energy of spin glass problem can be mapped as contraction of a tropical tensor network, which is actually calculating tons of matrix multiplication of Tropical numbers, as shown in
+* [arxiv: Tropical Tensor Network for Ground States of Spin Glasses](https://arxiv.org/abs/2008.06888)
+* [Lei Wang: "Tropical Tensor Networks"](https://www.youtube.com/watch?v=l_7xZ4trcnE)
+
 Although such reformulation did not actucally reduce the complexity of the problem, but in this way we can fully use the power of parallel computing technology developed in recent years and greatly speed up the computation.
 
-For that purpose, a fast implementation of the TropicalGEMM on GPU is on demand.
+Recently, it has also been considered to use the Tropical algebra in machine learning area, as shown in 
 
-## How we developed the package?
+* [Generalizing Backpropagation for Gradient-Based Interpretability](https://arxiv.org/abs/2307.03056)
+* [Torch-Struct: Deep Structured Prediction Library](https://arxiv.org/abs/2002.00876)
 
-Of course the package should be fast and fully used the power of GPU, and we also want it easy to be used.
-So basically there are two aspects:
+For these purposes, a fast implementation of the TropicalGEMM on GPU is on demand.
 
-1. An user friendly higer level interface,
-2. A high performance lower level kernel.
+## Matrix Multiplication of Tropical Numbers on GPU
 
-In our package, the former is achieved via the type system in Julia, and the later is achieved via wrapped C-Cuda kernels.
+We achieved fast TropicalGEMM via two packages in `Julia`.
+* [`TropicalNumbers.jl`](github.com/TensorBFS/TropicalNumbers.jl): an interface for Tropical Numbers, which will allow users to use tropical numbers just like normal numbers.
+* [`CuTropicalGEMM.jl`](github.com/TensorBFS/CuTropicalGEMM.jl): a fast implementation of the TropicalGEMM on GPU, fast and easy to use.
 
-### User friendly tropical interface
+In the following part of this section, we will mainly introduce these two packages.
+Including how to use them and how we developed them.
 
-Type system of Julia allows us to create our own type, and then overload the operations of them. 
-That is what we do in package [TropicalNumbers.jl](github.com/TensorBFS/TropicalNumbers.jl), simply by defining
+### Julia Programing Language
+
+As we mentioned above, we choose to use the `Julia` programing language, which is becoming more and more popular in the past few years.
+Why we choose `Julia`?
+Let's just copy something from the blog [*Why We Create Julia?*](https://julialang.org/blog/2012/02/why-we-created-julia/):
+
+>We are greedy: we want more.
+>
+>We want a language that's open source, with a liberal license. We want the speed of C with the dynamism of Ruby. We want a language that's homoiconic, with true macros like Lisp, but with obvious, familiar mathematical notation like Matlab. We want something as usable for general programming as Python, as easy for statistics as R, as natural for string processing as Perl, as powerful for linear algebra as Matlab, as good at gluing programs together as the shell. Something that is dirt simple to learn, yet keeps the most serious hackers happy. We want it interactive and we want it compiled.
+
+Briefly, `Julia` is fast, and easy to use.
+
+![Julia_Meme](figs/Julia_meme.png)
+
+### User Friendly Tropical Interface: `TropicalNumbers.jl`
+
+For convenience, we want to use tropical number just like normal numbers willout lose of performance, so that we make use of the type system in `Julia`.
+
+Type system of `Julia` allows us to create our own types, and `Julia` support multiple dispatch based on that.
+For example, we can do the following things in `Julia`
+```julia
+julia> struct bird end
+
+julia> struct dog end
+
+julia> function fly(a::bird) return true end
+fly (generic function with 1 method)
+
+julia> function fly(a::dog) return false end
+fly (generic function with 2 methods)
+
+julia> bird_1 = bird(); dog_1 = dog();
+
+julia> fly(bird_1)
+true
+
+julia> fly(dog_1)
+false
+```
+
+Then we can simply define the Tropical number as a new number type, and overload the correspond operations.
+That is what we do in package [TropicalNumbers.jl](github.com/TensorBFS/TropicalNumbers.jl).
 ```julia
 abstract type AbstractSemiring <: Number end
 
@@ -44,27 +106,19 @@ struct Tropical{T} <: AbstractSemiring
         new{T}(x)
     end
 end
-```
-and then we overloaded the operations
-```julia
+
 Base.:*(a::Tropical, b::Tropical) = Tropical(a.n + b.n)
 Base.:+(a::Tropical, b::Tropical) = Tropical(max(a.n, b.n))
 ```
-Then users can simply use the tropical algebra, for example
+In that case, users can use the tropical algebra just like normal numbers, for example
 ```julia
 julia> using TropicalNumbers
 
-julia> a = Tropical(1.0)
-1.0ₜ
+julia> a, b = Tropical(1.0), Tropical(2.0)
+(1.0ₜ, 2.0ₜ)
 
-julia> b = Tropical(2.0)
-2.0ₜ
-
-julia> a + b
-2.0ₜ
-
-julia> a * b
-3.0ₜ
+julia> a + b, a * b
+(2.0ₜ, 3.0ₜ)
 ```
 and opeartions of vectors and matrices also work
 ```julia
@@ -88,105 +142,177 @@ Since we define the tropical number as a subtype of `Number`,
 julia> isbitstype(Tropical{Float64})
 true
 ```
-which means the storage of tropical number in the memory is continium.
+which means the storage of an array of tropical numbers in the memory is continium, just like normal numbers.
 
-All these things work naturely, users will be able to use the tropical algebra just like real numbers.
+We also implemented other Tropical algebra, you can use them like that:
+```julia
+julia> TropicalAndOr(true), TropicalMinPlus(1.0), TropicalMaxMul(1.0)
+(trueₜ, 1.0ₛ, 1.0ₓ)
+``` 
 
-### High performance CUDA kernel
+All these things work naturally, users will be able to use the tropical algebra just like real numbers.
 
-For the lower level kernel, due to the requirement of performance, we choose to use `C-Cuda` directly and wrap the code with a Julia interface.
-In this part, we simply used some skills common in GEMM kernels to speed up the code, and we learned a lot from the repo [CUDA_gemm](https://github.com/Cjkkkk/CUDA_gemm) by [Cjkkk](https://cjkkkk.github.io).
-Here we will briefly introduce these skills, and for more detailed introduction, I recommand this [blog](https://zhuanlan.zhihu.com/p/441146275) in Chinese.
+### Fast TropicalGEMM on GPU: `CuTropicalGEMM.jl`
 
-As we all know, GPU is fast because it have a large amount of cores, and the cores are grouped into blocks.
-In the GPU kernels, we can allocate tasks to different blocks by decomposing them into a series of unrelated sub-tasks. Furthermore, we can further decompose the sub-tasks and assign them to threads for execution.
-However, this large number of parallel tasks also leads to another issue, which is the significant data payload. 
-Although the shared memory accessible by blocks is similar in speed to the L2 cache in CPUs, its capacity is limited. 
-Therefore, it is not possible to load all data into shared memory at once, and only the data required for the current block calculation can be loaded each time.
-Unfortunately, GEMM is a very memory-intensive operation, for example, when calculating the GEMM between a $M \times K$ matrix and a $K \times N$ matrix, if we use the naive way, i.e. evaluate the element in the result matrix one by one, we will have to load $M \times K \times N$ elements from the slow global memeory directly to registers in the whole process, and this generally far exceeds the data bandwidth of the GPU, resulting in severe performance issues.
+`CuTropicalGEMM.jl` is the package we developed to speed up the TropicalGEMM on Nvidia GPU.
+In this package, we use `C-Cuda` directly for the lower level interface to achieve a high performace and then wrap the code with a `Julia` interface, so that it is easy to use.
 
-To avoid the heavy data loading, we first split the target matrix into blocks with size $BM \times BN$, and each GPU block will be used to calculate one of the tiled matrix, as shown in the fig below: 
-
-![Fig.1](figs/block.png)
-
-When calculating each block, we will only need to load matrices with size $BM \times BK$ and $BK \times BN$ for~$K / BK$ times from global memory to shared memory.
-In that case, the total data loading will be reduce to 
+Before further introduction, let me first show you a simple benchmark result on NVIDIA A800 80GB PCIe:
+![Benchmark](figs/benchmark.png)
+We compared the performance of `CuTropicalGEMM.jl`, [GemmKernels.jl](https://github.com/JuliaGPU/GemmKernels.jl) and direct CUDA.jl map reduce on Tropical GEMM with single precision.
+The performance is defined as
 $$
-    M \times N \times K \times \left( \frac{1}{BM} + \frac{1}{BN} \right)
+\frac{2 \times M \times K \times N}{T}\;,
 $$
-which is much smaller than the naive way.
+where $M$, $N$, $K$ are the size of the matrix so that $2MNK$ is the number of total operations in matrix multiplication, and $T$ is the time cost.
+The performance of Cublas on normal GEMM is used as a reference of the maximum computing power.
+Clearly, the result shows that the performance of our package is about $75\%$ of the theortical maximum, which is quite high since the tropical algebra can not use the fused multiple add (FMA) opeartions.
 
-Then in each block, we further tile the matrix and use the registers to store the data, as shown by
+#### How to use this package?
 
-![Fig.1](figs/thread.png)
+`CuTropicalGEMM.jl` can be easily used, just like the `TropicalNumbers.jl`.
+We fully used the multiple dispatch in `Julia` and overloaded the function `LinearAlgebra.mul!` for the types `CuVecOrMat{Tropical}`, which will be called when you use $*$ between these tropical vectors or matrices.
 
-The tiled target matrix will be further divided as small matrices with size $TM \times TN$, and each thread will be used to calculate one of the tiled matrix.
-During this process, the outer product way is used and data will be loaded from shared memory to registers, with the amount of $(TM + TN) \times BK$ in total.
-
-Then we replaced the operations directly.
-As we mentioned above, the `Tropical` type is `bitstype`, and the data storaged in memeories are simply the floating point numbers, which can be directly used by CUDA kernels.
-Although the tropical algebra can not use the fused multiple add core (FMA), we found that the operation add/mul and max/min can be done on FMA and ALU parallelly, which means that we can use the FMA to do the add/mul and ALU to do the max/min at the same time.
-Then after all the calculation is done, the target in the registers will be stored back to global memory directly.
-
-For the boundary elements, a padding strategy is used, we simply set the element which are not acctually in the matrix as the zero element of the corresponding algebra, so that they will not effect the result of the calculation.
-In our package, we set the parameters as
-$$
-    BM = 64,~BK = 32,~BN = 64,~TM = TN = 4.
-$$
-
-In the end, we wrapped the code in Julia, and overloaded the function `LinearAlgebra.mutmul!`, so that a simple $*$ for tropical matrices will call our function and use GPU in calculations.
 Here is an example:
 ```julia
 julia> using CUDA, LinearAlgebra, TropicalNumbers, CuTropicalGEMM
 
 julia> A = CuArray(Tropical.(rand(2,2)))
 2×2 CuArray{Tropical{Float64}, 2, CUDA.Mem.DeviceBuffer}:
-  0.5054551076120295ₜ  0.2566654342554737ₜ
- 0.40277483290611305ₜ  0.8717314798683612ₜ
+ 0.5682481722270427ₜ  0.7835411877064771ₜ
+ 0.4228348375216514ₜ  0.9492658562534506ₜ
 
 julia> B = CuArray(Tropical.(rand(2,2)))
 2×2 CuArray{Tropical{Float64}, 2, CUDA.Mem.DeviceBuffer}:
- 0.7488281325136905ₜ  0.03728702805013795ₜ
- 0.8437060742174199ₜ   0.9777629175478465ₜ
+ 0.37361925746020586ₜ   0.6628092509923389ₜ
+  0.3415957179381368ₜ  0.28749655890269377ₜ
 
 julia> A * B
 2×2 CuArray{Tropical{Float64}, 2, CUDA.Mem.DeviceBuffer}:
-   1.25428324012572ₜ  1.2344283518033201ₜ
- 1.7154375540857811ₜ  1.8494943974162077ₜ
+ 1.1251369056446139ₜ  1.2310574232193816ₜ
+ 1.2908615741915874ₜ  1.2367624151561443ₜ
 ```
-It is much faster than the previous CPU implementation `TropicalGEMM.jl`
+Or if you want to use a pre-allocate matrix $C$ or calculate $C + A \times B$, you can use:
 ```julia
-julia> A = Tropical.(rand(1024,1024));
+julia> C = CuArray(Tropical.(zeros(2, 2)));
 
-julia> B = Tropical.(rand(1024,1024));
-
-julia> @time A * B;
-  4.215667 seconds (6 allocations: 8.030 MiB)
-
-julia> using TropicalGEMM
-
-julia> @time A * B;
-  0.095628 seconds (2 allocations: 8.000 MiB)
-
-julia> CuA = CuArray(A);
-
-julia> CuB = CuArray(B);
-
-julia> @time CuA * CuB;
-  0.001809 seconds (7 allocations: 256 bytes)
+julia> mul!(C, A, B)
+2×2 CuArray{Tropical{Float64}, 2, CUDA.Mem.DeviceBuffer}:
+ 1.1251369056446139ₜ  1.2310574232193816ₜ
+ 1.2908615741915874ₜ  1.2367624151561443ₜ
 ```
 
-### Benchmark
+To benchmark the performance, you can use the `@benchmark` and `CUDA.@sync` marco.
+```julia
+julia> using CUDA, CuTropicalGEMM, TropicalNumbers
 
-A simple benchmark is conducted to test the performance of our package, as shown below.
-We compared the performance of `CuTropicalGEMM.jl`, [GemmKernels.jl](https://github.com/JuliaGPU/GemmKernels.jl) and direct CUDA.jl map reduce on Tropical GEMM with single precision.
-The test is done on using NVIDIA A800 80GB PCIe, and the performance of Cublas on normal GEMM is used as a reference of the maximum computing power.
+julia> A = TropicalF32.(CUDA.rand(4096, 4096));
 
-![Benchmark](figs/benchmark.png)
+julia> B = TropicalF32.(CUDA.rand(4096, 4096));
+
+julia> @benchmark CUDA.@sync $(A) * $(B)
+BenchmarkTools.Trial: 53 samples with 5 evaluations.
+ Range (min … max):   6.691 μs …    1.574 s  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):      7.117 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   29.701 ms ± 216.171 ms  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+  █▅
+  ██▅▃▃▄▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃ ▁
+  6.69 μs         Histogram: frequency by time         30.7 μs <
+
+ Memory estimate: 256 bytes, allocs estimate: 7.
+```
+and what is important here is the `mean` time (currently there are some issues about the detection of time cost and we are still working on that).
+
+You can also use that in more complicated cases, when developing you own package, by `using CuTropicalGEMM`, the `mul!` opeartions between Tropical matrices will be overloaded.
+Here is an example to directly use this package to speed up the maximum independent set (MIS) problem.
+```julia
+julia> using GenericTensorNetworks, GenericTensorNetworks.Graphs, CUDA, Random
+
+julia> g = Graphs.random_regular_graph(200, 3)
+{200, 300} undirected simple Int64 graph
+
+julia> item(x::AbstractArray) = Array(x)[];
+
+julia> optimizer = TreeSA(ntrials=1);
+
+julia> gp = IndependentSet(g; optimizer=optimizer);
+
+julia> contraction_complexity(gp)
+Time complexity: 2^30.519117443024154
+Space complexity: 2^24.0
+Read-write complexity: 2^27.24293120300714
+
+julia> @time CUDA.@sync solve(gp, SizeMax(); usecuda=true, T=Float32)
+ 31.104404 seconds (48.07 M allocations: 3.239 GiB, 2.31% gc time, 88.25% compilation time: <1% of which was recompilation)
+0-dimensional CuArray{Tropical{Float32}, 0, CUDA.Mem.DeviceBuffer}:
+89.0ₜ
+
+julia> using CuTropicalGEMM
+
+julia> @time CUDA.@sync solve(gp, SizeMax(); usecuda=true, T=Float32)
+  0.361831 seconds (440.99 k allocations: 28.131 MiB, 85.79% compilation time: 100% of which was recompilation)
+0-dimensional CuArray{Tropical{Float32}, 0, CUDA.Mem.DeviceBuffer}:
+89.0ₜ
+```
+
+#### Why it is fast?
+
+Here we will breifly introduce the techniques we used to speed up our code, which are commonly used in GPU implementation of GEMM.
+We learned a lot from the repo [CUDA_gemm](https://github.com/Cjkkkk/CUDA_gemm) by [Cjkkk](https://cjkkkk.github.io).
+Here we will briefly introduce these techinques, and for more detailed introduction, I recommand this [blog](https://zhuanlan.zhihu.com/p/441146275) in Chinese.
+
+As we all know, Nvidia GPU is fast because it have a large amount of cuda cores.
+For example, the Nvidia A800 GPU have $6912$ cuda cores, which is much more larger than the number of CPU cores, which is normally less than $100$.
+![CPU vs GPU](https://www.intel.com/content/dam/developer/articles/technical/comparing-cpus-gpus-and-fpgas-for-oneapi/CvGvF_CPU_GPU.jpg)
+However, each cuda core is much weaker than that of CPU, so that the developer will have to properly allocate the tasks to these cores so that can fully use them.
+In a CUDA kernel, each cuda core is used by a *thread* and these *threads* are grouped as *blocks*.
+
+Another imortant aspect is the memory of GPU, there are three type of programable memories on GPU:
+* Global memory, shared by all blocks, large but slow.
+* Shared memory, shared by threads in the same block, small but fast, just like a programable L1 cache.
+* Registers, used by only one thread.
+
+Driectly loading data from global memory will take a long time, the bandwidth is only about $1000$GB/s and the latency is about $600$ cycles on A800 GPU.
+For shared memory, its bandwidth is about $20000$GB/s while the latency is only about $23$ cycles, so that another main target in GPU programing is to properly use the memory, avoid directly loading from the global memory and pre-load the needed data into the shared memory. 
+
+GEMM is a very memory-intensive operation, for example, when calculating the GEMM between a $M \times K$ matrix and a $K \times N$ matrix, if we use the naive way, i.e. evaluating the element in the result matrix one by one, for each element we will have to load $2K$ data for $M \times N$ times.
+Then we will have to load $2 \times M \times K \times N$ elements from the slow global memeory directly to registers in the whole process, and this generally far exceeds the data bandwidth of the GPU, resulting in serious performance issues.
+
+To avoid the heavy data loading, we first split the target matrix blocks with size $BM \times BN$, and each GPU block will be used to calculate one of the matrix blocks, as shown in the fig below: 
+
+![Fig.1](figs/block.png)
+
+When calculating each block, we only need to load matrices with size $BM \times BK$ and $BK \times BN$ for~$K / BK$ times from global memory to shared memory.
+In that case, the total data loading will be reduce to 
+$$
+    M \times N \times K \times \left( \frac{1}{BM} + \frac{1}{BN} \right)
+$$
+which is much smaller than the naive way.
+
+Then in each block, we further divide the matrix and use the registers to store the data, as shown by
+
+![Fig.1](figs/thread.png)
+
+The target matrix will be further divided as small matrices with size $TM \times TN$, and each thread will be used to calculate one of the matrix.
+During this process, the outer product way is used and data will be loaded from shared memory to registers, with the amount of $(TM + TN) \times BK$ in total.
+In our package, we set the parameters as
+$$
+    BM = 64,~BK = 32,~BN = 64,~TM = TN = 4.
+$$
+
+As we mentioned above, the `Tropical` type is `bitstype`, and the data storaged in memeories are simply the floating point numbers, which can be directly used by CUDA kernels.
+Of course here we used the tropical algebra instead of the normal ones.
+Although the tropical algebra can not use the fused multiple add core (FMA), we found that the operation add/mul and max/min can be done on FMA and ALU parallelly, which means that we can use the FMA to do the add/mul and ALU to do the max/min at the same time.
+Then after all the calculation is done, the target in the registers will be stored back to global memory directly.
+
+For the boundary elements, a padding strategy is used, we simply set the element which are not acctually in the matrix as the zero element of the corresponding algebra, so that they will not effect the result of the calculation.
+
+#### Benchmark
 
 Further benchmarking is still in development, and will be uoloaded to this repo [CuTropicalGEMM_benchmark](https://github.com/ArrogantGao/CuTropicalGEMM_benchmark).
 
-## Further Optimization
+### Optimization of Narrow Matrix Performance
 
 The second aspect is to further optimize the code, especially the performance on narrow matrices.
 As mentioned above, our package now is using the padding strategy to handle the boundary elements, and the minimum matrix size we process in each block on the GPU are $64 \times 32 \times 64$, which is optimal for large square matrices.
@@ -196,8 +322,24 @@ Unfortunately, such narrow matrices are very common in the tensor network contra
 
 Now we are considering further optimize the code for narrow matrices, related code are stored in the branch [narrow matrices](https://github.com/TensorBFS/CuTropicalGEMM.jl/tree/narrow_matrices).
 
+## Open Source Promotion Plan
+
+As mentioned above, this program is support by [Open Source Promotion Plan 2023](https://summer-ospp.ac.cn/), JuliaCN.
+>Open Source Promotion Plan is a summer program organized by the Institute of Software Chinese Academy of Sciences and long-term supported by the Open Source Software Supply Chain Promotion Plan. It aims to encourage college students to actively participate in the maintenance and development of open source software, promote the vigorous development of open source software communities, and build the open source software supply chain together.
+
+I will recommend anyone who is interested in developing open source software to join this plan.
+During the plan, the open source communities will release [projects](https://summer-ospp.ac.cn/org/orglist) and each participant can choose three projects to apply.
+Once the application is approved, the participants can follow the mentor to complete the program in about three months.
+![timeline](figs/timeline.png)
+I think it is a great chance to learn and to build connection with the community.
+
+The plan starts in each summer, and the application commonly opens in June.
+If interested, just go and join OSPP $2024$!
+
 ## Acknowledgement
 
-I am very grateful for the guidance and assistance provided by Professor Liu during the project implementation process.
-I would like to thank Tim Besard for his invaluable guidance and support during the development of the package, his expertise in GPU utilization have been immensely helpful. 
-I also want to thank Tyler Thomas for his assistance in understanding the usage of BinaryBuilder.jl.
+I am very grateful for the guidance and assistance provided by Prof. [Jinguo Liu](https://github.com/GiggleLiu) during the project implementation process.
+I would like to thank [Tim Besard](https://github.com/maleadt) for his invaluable guidance and support during the development of the package, his expertise in GPU utilization have been immensely helpful. 
+I also want to thank [Tyler Thomas](https://github.com/tylerjthomas9) for his assistance in understanding the usage of BinaryBuilder.jl.
+
+This program is support by [Open Source Promotion Plan 2023](https://summer-ospp.ac.cn/), JuliaCN.

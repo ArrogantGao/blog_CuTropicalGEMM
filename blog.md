@@ -277,7 +277,7 @@ Another imortant aspect is the memory of GPU, there are three type of programabl
 Driectly loading data from global memory will take a long time, the bandwidth is only about $1000$GB/s and the latency is about $600$ cycles on A800 GPU.
 For shared memory, its bandwidth is about $20000$GB/s while the latency is only about $23$ cycles, so that another main target in GPU programing is to properly use the memory, avoid directly loading from the global memory and pre-load the needed data into the shared memory. 
 
-GEMM is a very memory-intensive operation, for example, when calculating the GEMM between a $M \times K$ matrix and a $K \times N$ matrix, if we use the naive way, i.e. evaluating the element in the result matrix one by one, for each element we will have to load $2K$ data for $M \times N$ times.
+GEMM is a very memory-intensive operation, for example, when calculating the GEMM between a $M \times K$ matrix and a $K \times N$ matrix, if we use the naive way, i.e. evaluating the element in the result matrix one by one, for each element we will have to load $2K$ data, and there are $M \times N$ elements in total.
 Then we will have to load $2 \times M \times K \times N$ elements from the slow global memeory directly to registers in the whole process, and this generally far exceeds the data bandwidth of the GPU, resulting in serious performance issues.
 
 To avoid the heavy data loading, we first split the target matrix blocks with size $BM \times BN$, and each GPU block will be used to calculate one of the matrix blocks, as shown in the fig below: 
